@@ -158,7 +158,7 @@ func updateProductHandler(c *fiber.Ctx) error {
 
   product, err := updateProduct(productId, p)
   if err != nil {
-    return c.SendStatus(fiber.StatusBadRequest)
+    return c.Status(fiber.StatusBadRequest).SendString("Product update failed.")
   }
 
   return c.JSON(product)
