@@ -1,12 +1,21 @@
 package main
 
 import (
-  "database/sql"
-  "fmt"
-  "log"
-  "strconv"
-  "github.com/gofiber/fiber/v2"
-  _ "github.com/lib/pq"
+	"fmt"
+	"log"
+  "os"
+  "time"
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
+	// "database/sql"
+	// "fmt"
+	// "log"
+	// "strconv"
+	"github.com/gofiber/fiber/v2"
+  "github.com/joho/godotenv"
+  "github.com/golang-jwt/jwt/v4"
+	// _ "github.com/lib/pq"
 )
 
 const (
@@ -17,169 +26,111 @@ const (
   dbname   = "mydatabase" // as defined in docker-compose.yml
 )
 
-var db *sql.DB
+func requireAuth(c *fiber.Ctx) error {
+  cookie := c.Cookies("jwt")
 
-type Product struct {
-	ID int `json:id`
-	Name string `json:"name"`
-	Price int `json:"price"`
+  token, err := jwt.ParseWithClaims(cookie, &jwt.MapClaims{}, func(token *jwt.Token) (interface{}, error) {
+    return []byte(os.Getenv("JWT_KEY")), nil
+  })
+  if err != nil || !token.Valid {
+    return c.SendStatus(fiber.StatusUnauthorized)
+  }
+
+  return c.Next()
 }
 
 func main() {
-  psqlInfo := fmt.Sprintf("host=%s port=%d user=%s "+
-    "password=%s dbname=%s sslmode=disable",
-    host, port, user, password, dbname)
-  
-  sdb, err := sql.Open("postgres", psqlInfo)
+  err := godotenv.Load()
+    if err != nil {
+        log.Fatal("Error loading .env file")
+    }
+  dsn := fmt.Sprintf("host=%s port=%d user=%s "+
+  "password=%s dbname=%s sslmode=disable",
+  host, port, user, password, dbname)
+
+  newLogger := logger.New(
+    log.New(os.Stdout, "\r\n", log.LstdFlags),
+    logger.Config{
+      SlowThreshold: time.Second,
+      LogLevel:      logger.Info,
+      Colorful:      true,
+    },
+  )
+
+  db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
+    Logger: newLogger,
+  })
+
   if err != nil {
-    log.Fatal(err)
+    panic("failed to connect to database")
   }
 
-  db = sdb
-  defer db.Close()
+  db.AutoMigrate(&Book{}, &Publisher{}, &Author{}, &AuthorBook{})
 
-  err = db.Ping()
-  if err != nil {
-    log.Fatal(err)
+  publisher := Publisher{
+    Details: "Publisher Details",
+    Name:    "Publisher Name",
   }
+  _ = createPublisher(db, &publisher)
 
+  author := Author{
+    Name: "Author Name",
+  }
+  _ = createAuthor(db, &author)
+
+  book := Book{
+    Name:        "Book Title",
+    Author:      "Book Author",
+    Description: "Book Description",
+    PublisherID: publisher.ID,
+    Authors:     []Author{author},
+  }
+  _ = createBookWithAuthor(db, &book, []uint{author.ID})
   app := fiber.New()
 
-  app.Get("/product/:id", getProductHandler)
-  app.Get("/products", getProductsHandler)
-  app.Post("/product", createProductHandler)
-  app.Put("/product/:id", updateProductHandler)
-  app.Delete("product/:id", deleteProductHandler)
+  // app.Use("/books", requireAuth)
+  // app.Get("/books", func(c *fiber.Ctx) error {
+  //   return c.JSON(getBooks(db))
+  // })
+  // app.Post("/reg", func(c *fiber.Ctx) error {
+  //   user := new(User)
+
+  //   if err := c.BodyParser(user); err != nil {
+  //     return c.SendStatus(fiber.StatusBadRequest)
+  //   }
+
+  //   err = createUser(db, user)
+
+  //   if err != nil {
+  //     return c.SendStatus(fiber.StatusBadRequest)
+  //   }
+
+  //   return c.JSON(fiber.Map{
+  //     "message": "Reg success",
+  //   })
+  // })
+
+  // app.Post("/login", func(c *fiber.Ctx) error {
+  //   user := new(User)
+  //   if err := c.BodyParser(user); err != nil {
+  //     return c.SendStatus(fiber.StatusBadRequest)
+  //   }
+  //   token, err := loginUser(db, user)
+  //   if err != nil {
+  //     return c.SendStatus(fiber.StatusBadRequest)
+  //   }
+
+  //   c.Cookie(&fiber.Cookie{
+  //     Name: "jwt",
+  //     Value: token,
+  //     Expires: time.Now().Add(time.Hour * 72),
+  //     HTTPOnly: true,
+  //   })
+
+  //   return c.JSON(fiber.Map{
+  //     "token": "Login success",
+  //   })
+  // })
 
   app.Listen(":8080")
-}
-
-func getProduct(id int) (Product, error) {
-  var p Product
-  row := db.QueryRow(`SELECT id, name, price FROM products WHERE id = $1;`, id)
-  err := row.Scan(&p.ID, &p.Name, &p.Price)
-  if err != nil {
-    return Product{}, err
-  }
-  return p, nil
-}
-
-func getProductHandler(c *fiber.Ctx) error {
-  productId, err := strconv.Atoi(c.Params("id"))
-  if err != nil {
-    return c.SendStatus(fiber.StatusBadRequest)
-  }
-  product, err := getProduct(productId)
-  if err != nil {
-    return c.SendStatus(fiber.StatusBadRequest)
-  }
-  return c.JSON(product)
-}
-
-func getProducts() ([]Product, error) {
-  rows, err := db.Query("SELECT id, name, price FROM products")
-  if err != nil {
-    return nil, err
-  }
-  defer rows.Close()
-  var products []Product
-  for rows.Next() {
-    var p Product
-    err := rows.Scan(&p.ID, &p.Name, &p.Price)
-    if err != nil {
-      return nil, err
-    }
-    products = append(products, p)
-  }
-  if err = rows.Err(); err != nil {
-    return nil, err
-  }
-  return products, err
-}
-
-func getProductsHandler(c *fiber.Ctx) error {
-  products, err := getProducts()
-  if err != nil {
-    return c.SendStatus(fiber.StatusBadRequest)
-  }
-  return c.JSON(products)
-}
-
-func createProduct(product *Product) error {
-  _, err := db.Exec(
-    "INSERT INTO products(name, price) VALUES ($1, $2)",
-    product.Name,
-    product.Price,
-  )
-  return err
-}
-
-func createProductHandler(c *fiber.Ctx) error {
-  p := new(Product)
-  if err := c.BodyParser(p); err != nil {
-    return c.SendStatus(fiber.StatusBadRequest)
-  }
-
-  err := createProduct(p)
-  if err != nil {
-    return c.SendStatus(fiber.StatusBadRequest)
-  }
-  return c.JSON(p)
-}
-
-func updateProduct(id int, product *Product) (Product, error) {
-  var p Product
-  query := `
-    UPDATE products
-    SET name = $1, price = $2
-    WHERE id = $3
-    RETURNING id, name, price;
-  `
-  err := db.QueryRow(query, product.Name, product.Price, id).Scan(&p.ID, &p.Name, &p.Price)
-  if err != nil {
-    return Product{}, err
-  }
-
-  return p, nil
-}
-
-func updateProductHandler(c *fiber.Ctx) error {
-  productId, err := strconv.Atoi(c.Params("id"))
-  if err != nil {
-    return c.SendStatus(fiber.StatusBadRequest)
-  }
-
-  p := new(Product)
-  if err := c.BodyParser(p); err != nil {
-    return c.SendStatus(fiber.StatusBadRequest)
-  }
-
-  fmt.Printf("Parsed Product: %+v\n", p)
-
-  product, err := updateProduct(productId, p)
-  if err != nil {
-    return c.Status(fiber.StatusBadRequest).SendString("Product update failed.")
-  }
-
-  return c.JSON(product)
-}
-
-func deleteProduct(id int) error {
-  _, err := db.Exec(
-    "DELETE FROM products WHERE id=$1;",
-    id,
-  )
-  return err
-}
-
-func deleteProductHandler(c *fiber.Ctx) error {
-  productId, err := strconv.Atoi(c.Params("id"))
-  if err != nil {
-    return c.Status(fiber.StatusBadRequest).SendString("Convert failed")
-  }
-  err = deleteProduct(productId)
-  if err != nil {
-    return c.Status(fiber.StatusBadRequest).SendString("Delete failed")
-  }
-  return c.SendStatus(fiber.StatusNoContent)
 }
