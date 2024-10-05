@@ -12,11 +12,11 @@ import (
 )
 
 const (
-  host     = "localhost"  // or the Docker service name if running in another container
-  port     = 5432         // default PostgreSQL port
-  user     = "myuser"     // as defined in docker-compose.yml
-  password = "mypassword" // as defined in docker-compose.yml
-  dbname   = "mydatabase" // as defined in docker-compose.yml
+  host     = "localhost"
+  port     = 5432
+  user     = "myuser"
+  password = "mypassword"
+  dbname   = "mydatabase"
 )
 
 func main() {
@@ -34,10 +34,6 @@ func main() {
   if err := db.AutoMigrate(&entities.Order{}); err != nil {
 		log.Fatalf("failed to migrate database: %v", err)
 	}
-
-  if err := db.AutoMigrate(&entities.Order{}); err != nil {
-    log.Fatalf("failed to migrate database: %v", err)
-  }
 
   orderRepo := adapters.NewGormOrderRepository(db)
   orderService := usecases.NewOrderService(orderRepo)
