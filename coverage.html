@@ -1,0 +1,346 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>adapters: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/ipxz-p/GoPostgreSQL101/adapters/gorm_order_repository.go (0.0%)</option>
+				
+				<option value="file1">github.com/ipxz-p/GoPostgreSQL101/adapters/http_order_handler.go (50.0%)</option>
+				
+				<option value="file2">github.com/ipxz-p/GoPostgreSQL101/main.go (0.0%)</option>
+				
+				<option value="file3">github.com/ipxz-p/GoPostgreSQL101/models.go (0.0%)</option>
+				
+				<option value="file4">github.com/ipxz-p/GoPostgreSQL101/usecases/order_use_case.go (80.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package adapters
+
+import (
+        "gorm.io/gorm"
+        "github.com/ipxz-p/GoPostgreSQL101/usecases"
+        "github.com/ipxz-p/GoPostgreSQL101/entities"
+)
+
+type GormOrderRepository struct {
+        db *gorm.DB
+}
+
+func NewGormOrderRepository(db *gorm.DB) usecases.OrderRepository <span class="cov0" title="0">{
+        return &amp;GormOrderRepository{db: db}
+}</span>
+
+func (r *GormOrderRepository) Save(order entities.Order) error <span class="cov0" title="0">{
+        return r.db.Create(&amp;order).Error
+}</span>
+
+func (r *GormOrderRepository) FindByID(id uint) (*entities.Order, error) <span class="cov0" title="0">{
+        var order entities.Order
+        if err := r.db.First(&amp;order, id).Error; err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov0" title="0">return &amp;order, nil</span>
+}</pre>
+		
+		<pre class="file" id="file1" style="display: none">package adapters
+
+import (
+        "github.com/gofiber/fiber/v2"
+        "github.com/ipxz-p/GoPostgreSQL101/usecases"
+        "github.com/ipxz-p/GoPostgreSQL101/entities"
+)
+
+type HttpOrderHandler struct {
+        orderUseCase usecases.OrderUseCase
+}
+
+func NewHttpOrderHandler(useCase usecases.OrderUseCase) *HttpOrderHandler <span class="cov8" title="1">{
+        return &amp;HttpOrderHandler{orderUseCase: useCase}
+}</span>
+
+func (h *HttpOrderHandler) CreateOrder(c *fiber.Ctx) error <span class="cov8" title="1">{
+        var order entities.Order
+        if err := c.BodyParser(&amp;order); err != nil </span><span class="cov8" title="1">{
+          return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request"})
+        }</span>
+
+        <span class="cov8" title="1">if err := h.orderUseCase.CreateOrder(order); err != nil </span><span class="cov8" title="1">{
+          return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+        }</span>
+  
+        <span class="cov8" title="1">return c.Status(fiber.StatusCreated).JSON(order)</span>
+  }
+
+func (h *HttpOrderHandler) GetOrder(c *fiber.Ctx) error <span class="cov0" title="0">{
+        id, err := c.ParamsInt("id")
+        if err !=  nil </span><span class="cov0" title="0">{
+                return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err})
+        }</span>
+        <span class="cov0" title="0">order, err := h.orderUseCase.GetOrder(uint(id))
+        if err != nil </span><span class="cov0" title="0">{
+                return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "order not found"})
+        }</span>
+        <span class="cov0" title="0">return c.Status(fiber.StatusCreated).JSON(order)</span>
+}</pre>
+		
+		<pre class="file" id="file2" style="display: none">package main
+
+import (
+        "fmt"
+        "log"
+        "github.com/gofiber/fiber/v2"
+        "github.com/ipxz-p/GoPostgreSQL101/adapters"
+        "github.com/ipxz-p/GoPostgreSQL101/entities"
+        "github.com/ipxz-p/GoPostgreSQL101/usecases"
+        "gorm.io/driver/postgres"
+        "gorm.io/gorm"
+)
+
+const (
+  host     = "localhost"
+  port     = 5432
+  user     = "myuser"
+  password = "mypassword"
+  dbname   = "mydatabase"
+)
+
+func main() <span class="cov0" title="0">{
+  app := fiber.New()
+
+  dsn := fmt.Sprintf("host=%s port=%d user=%s "+
+  "password=%s dbname=%s sslmode=disable",
+  host, port, user, password, dbname)
+  db, err := gorm.Open(postgres.Open(dsn), &amp;gorm.Config{})
+
+  if err != nil </span><span class="cov0" title="0">{
+    panic("failed to connect to database")</span>
+  }
+
+  <span class="cov0" title="0">if err := db.AutoMigrate(&amp;entities.Order{}); err != nil </span><span class="cov0" title="0">{
+                log.Fatalf("failed to migrate database: %v", err)
+        }</span>
+
+  <span class="cov0" title="0">orderRepo := adapters.NewGormOrderRepository(db)
+  orderService := usecases.NewOrderService(orderRepo)
+  orderHandler := adapters.NewHttpOrderHandler(orderService)
+
+  app.Post("/order", orderHandler.CreateOrder)
+  app.Get("/order/:id", orderHandler.GetOrder)
+
+  log.Fatal(app.Listen(":8000"))</span>
+}</pre>
+		
+		<pre class="file" id="file3" style="display: none">package main
+
+import (
+        "gorm.io/gorm"
+)
+
+type Book struct {
+        gorm.Model
+        Name        string `json:"name"`
+        Author      string `json:"author"`
+        Description string `json:"description"`
+        PublisherID uint
+        Publisher   Publisher
+        Authors     []Author `gorm:"many2many:author_books;"`
+}
+
+type Publisher struct {
+        gorm.Model
+        Details string
+        Name    string
+}
+
+type Author struct {
+        gorm.Model
+        Name  string
+        Books []Book `gorm:"many2many:author_books;"`
+}
+
+type AuthorBook struct {
+        AuthorID uint
+        Author   Author
+        BookID   uint
+        Book     Book
+}
+
+func createPublisher(db *gorm.DB, publisher *Publisher) error <span class="cov0" title="0">{
+        result := db.Create(publisher)
+        if result.Error != nil </span><span class="cov0" title="0">{
+                return result.Error
+        }</span>
+        <span class="cov0" title="0">return nil</span>
+}
+
+func createAuthor(db *gorm.DB, author *Author) error <span class="cov0" title="0">{
+        result := db.Create(author)
+        if result.Error != nil </span><span class="cov0" title="0">{
+                return result.Error
+        }</span>
+        <span class="cov0" title="0">return nil</span>
+}
+
+func createBookWithAuthor(db *gorm.DB, book *Book, authorIDs []uint) error <span class="cov0" title="0">{
+        if err := db.Create(book).Error; err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov0" title="0">return nil</span>
+}
+
+func getBookWithPublisher(db *gorm.DB, bookID uint) (*Book, error) <span class="cov0" title="0">{
+        var book Book
+        result := db.Preload("Publisher").First(&amp;book, bookID)
+        if result.Error != nil </span><span class="cov0" title="0">{
+                return nil, result.Error
+        }</span>
+        <span class="cov0" title="0">return &amp;book, nil</span>
+}
+
+func getBookWithAuthors(db *gorm.DB, bookID uint) (*Book, error) <span class="cov0" title="0">{
+        var book Book
+        result := db.Preload("Authors").First(&amp;book, bookID)
+        if result.Error != nil </span><span class="cov0" title="0">{
+                return nil, result.Error
+        }</span>
+        <span class="cov0" title="0">return &amp;book, nil</span>
+}
+
+func listBooksOfAuthor(db *gorm.DB, authorID uint) ([]Book, error) <span class="cov0" title="0">{
+        var books []Book
+        result := db.Joins("JOIN author_books on author_books.book_id = books.id").
+                Where("author_books.author_id = ?", authorID).
+                Find(&amp;books)
+        if result.Error != nil </span><span class="cov0" title="0">{
+                return nil, result.Error
+        }</span>
+        <span class="cov0" title="0">return books, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">package usecases
+
+import (
+        "errors"
+
+        "github.com/ipxz-p/GoPostgreSQL101/entities"
+)
+
+type OrderUseCase interface {
+        CreateOrder(order entities.Order) error
+        GetOrder(id uint) (*entities.Order, error)
+}
+
+type OrderService struct {
+        repo OrderRepository
+}
+
+func NewOrderService(repo OrderRepository) OrderUseCase <span class="cov8" title="1">{
+        return &amp;OrderService{repo: repo}
+}</span>
+
+func (s *OrderService) CreateOrder(order entities.Order) error <span class="cov8" title="1">{
+        if order.Total &lt;= 0 </span><span class="cov8" title="1">{
+                return errors.New("Total must be positive")
+        }</span>
+        <span class="cov8" title="1">return s.repo.Save(order)</span>
+}
+
+func (s *OrderService) GetOrder(id uint) (*entities.Order, error) <span class="cov0" title="0">{
+        return s.repo.FindByID(id)
+}</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
